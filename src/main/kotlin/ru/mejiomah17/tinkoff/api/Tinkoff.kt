@@ -11,6 +11,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import ru.mejiomah17.tinkoff.api.model.auth.by.phone.AuthByPhoneResponse
 import ru.mejiomah17.tinkoff.api.model.auth.session.AuthResponse
+import ru.mejiomah17.tinkoff.api.model.grouped.requests.accounts.AccountsResponse
 import java.io.File
 import java.time.Duration
 import java.time.Instant
@@ -43,12 +44,15 @@ fun main() {
         httpClient = client
     )
     authFile.writeText(Json.encodeToString(secondTinkoff.authInformation))
-    secondTinkoff.getAccounts()
-    secondTinkoff.getOperations(
-        System.getenv("account"),
-        startDate = Instant.now().minus(Duration.ofDays(30)),
-        endDate = Instant.now()
-    )
+    val accountId = secondTinkoff.getAccounts().payload.accounts?.payload?.first { it.accountType == "Current" }?.id
+    if (accountId != null) {
+        secondTinkoff.getOperations(
+            account = accountId,
+            startDate = Instant.now().minus(Duration.ofDays(30)),
+            endDate = Instant.now()
+        )
+    }
+
 }
 
 class Tinkoff internal constructor(
@@ -432,6 +436,10 @@ class Tinkoff internal constructor(
         private inline fun <reified T> post(client: OkHttpClient, noinline block: HttpPostContext.() -> Unit): T {
             return json.decodeFromString(httpPost(client, block).body?.string()!!)
         }
+
+        private inline fun <reified T> get(client: OkHttpClient, noinline block: HttpPostContext.() -> Unit): T {
+            return json.decodeFromString(httpPost(client, block).body?.string()!!)
+        }
     }
 
     private val sessionId = authInformation.sessionId
@@ -444,15 +452,15 @@ class Tinkoff internal constructor(
         }.body?.string()!!
     }
 
-    fun getAccounts(): String {
-        return httpPost(client) {
+    fun getAccounts(): AccountsResponse {
+        return post {
             url("https://api.tinkoff.ru/v1/grouped_requests?sessionid=$sessionId&deviceId=$deviceId&appVersion=5.8.1&platform=android")
             body {
                 form {
                     "requestsData" to "[{\"key\":\"accounts\",\"operation\":\"accounts_flat\",\"params\":{}},{\"key\":\"list_shared_resources\",\"operation\":\"list_shared_resources\",\"params\":{}},{\"key\":\"list_owner_shared_resources\",\"operation\":\"list_owner_shared_resources\",\"params\":{}}]"
                 }
             }
-        }.body?.string()!!
+        }
     }
 
     fun getOperations(
@@ -463,5 +471,13 @@ class Tinkoff internal constructor(
         return httpGet {
             url("https://api.tinkoff.ru/v1/operations?account=$account&end=${endDate.toEpochMilli()}&start=${startDate.toEpochMilli()}&sessionid=$sessionId&appVersion=5.8.1&platform=android")
         }.body!!.string()
+    }
+
+    private inline fun <reified T> get(noinline block: HttpPostContext.() -> Unit): T {
+        return Companion.get(client, block)
+    }
+
+    private inline fun <reified T> post(noinline block: HttpPostContext.() -> Unit): T {
+        return Companion.post(client, block)
     }
 }
