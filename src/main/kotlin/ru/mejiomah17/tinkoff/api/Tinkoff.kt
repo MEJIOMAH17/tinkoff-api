@@ -12,6 +12,8 @@ import okhttp3.logging.HttpLoggingInterceptor
 import ru.mejiomah17.tinkoff.api.model.auth.by.phone.AuthByPhoneResponse
 import ru.mejiomah17.tinkoff.api.model.auth.session.AuthResponse
 import java.io.File
+import java.time.Duration
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
@@ -42,7 +44,11 @@ fun main() {
     )
     authFile.writeText(Json.encodeToString(secondTinkoff.authInformation))
     secondTinkoff.getAccounts()
-
+    secondTinkoff.getOperations(
+        System.getenv("account"),
+        startDate = Instant.now().minus(Duration.ofDays(30)),
+        endDate = Instant.now()
+    )
 }
 
 class Tinkoff internal constructor(
@@ -447,5 +453,15 @@ class Tinkoff internal constructor(
                 }
             }
         }.body?.string()!!
+    }
+
+    fun getOperations(
+        account: String,
+        startDate: Instant,
+        endDate: Instant
+    ): String {
+        return httpGet {
+            url("https://api.tinkoff.ru/v1/operations?account=$account&end=${endDate.toEpochMilli()}&start=${startDate.toEpochMilli()}&sessionid=$sessionId&appVersion=5.8.1&platform=android")
+        }.body!!.string()
     }
 }
