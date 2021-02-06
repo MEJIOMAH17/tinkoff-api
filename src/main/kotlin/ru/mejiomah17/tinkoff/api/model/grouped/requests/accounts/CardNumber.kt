@@ -1,12 +1,13 @@
 package ru.mejiomah17.tinkoff.api.model.grouped.requests.accounts
 
 import kotlinx.serialization.Serializable
+import ru.mejiomah17.tinkoff.api.model.common.Amount
 
 @Serializable
 
 data class CardNumber(
     val activated: Boolean? = null,
-    val availableBalance: AvailableBalance? = null,
+    val availableBalance: Amount? = null,
     val brand: Brand? = null,
     val canBeRemoved: Boolean? = null,
     val cardDesign: String? = null,
