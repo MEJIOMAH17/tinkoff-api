@@ -5,49 +5,49 @@ import io.github.rybalkinsd.kohttp.dsl.httpGet
 import io.github.rybalkinsd.kohttp.dsl.httpPost
 import io.github.rybalkinsd.kohttp.ext.url
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import ru.mejiomah17.tinkoff.api.model.auth.by.phone.AuthByPhoneResponse
 import ru.mejiomah17.tinkoff.api.model.auth.session.AuthResponse
+import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
 
 
 fun main() {
+    val authFile = File("auth.json")
     val logging = HttpLoggingInterceptor(HttpLoggingInterceptor.Logger {
         println(it)
     }).setLevel(HttpLoggingInterceptor.Level.BODY)
     val client = OkHttpClient.Builder()
         .addInterceptor(logging)
         .build()
-    val tinkoff = Tinkoff.create(
-        phoneNumber = System.getenv("phone"),
-        httpClient = client,
-        confirmationCodeProvider = { println("password sms:");readLine()!! },
-        password = System.getenv("password")
-    )
-    val accounts = tinkoff.getAccounts()
+    if (!authFile.exists()) {
+        val tinkoff = Tinkoff.create(
+            phoneNumber = System.getenv("phone"),
+            httpClient = client,
+            confirmationCodeProvider = { println("password sms:");readLine()!! },
+            password = System.getenv("password")
+        )
+        authFile.writeText(Json.encodeToString(tinkoff.authInformation))
+    }
+
 
     val secondTinkoff = Tinkoff.create(
-        oldSessionId = tinkoff.sessionId,
-        authTypeSetDate = tinkoff.authTypeSafeDate,
-        pinHash = tinkoff.pinHash,
-        deviceId = tinkoff.deviceId,
+        authInformation = Json.decodeFromString(authFile.readText()),
         httpClient = client
     )
+    authFile.writeText(Json.encodeToString(secondTinkoff.authInformation))
     secondTinkoff.getAccounts()
 
-    println()
 }
 
-class Tinkoff(
+class Tinkoff internal constructor(
     private val client: OkHttpClient,
-    val sessionId: String,
-    val deviceId: String,
-    val authTypeSafeDate: LocalDateTime,
-    val pinHash: String
+    val authInformation: AuthInformation
 ) {
     companion object {
         private val json = Json {
@@ -109,31 +109,30 @@ class Tinkoff(
 
             return Tinkoff(
                 client = httpClient,
-                sessionId = authResponse.payload.sessionid,
-                deviceId = deviceId,
-                authTypeSafeDate = authDate,
-                pinHash = pinHash
+                authInformation = AuthInformation(
+                    sessionId = authResponse.payload.sessionid,
+                    deviceId = deviceId,
+                    authTypeSafeDate = authDate.formatToAuthTypeSetDate(),
+                    pinHash = pinHash
+                )
             )
         }
 
         fun create(
-            oldSessionId: String,
-            authTypeSetDate: LocalDateTime,
-            pinHash: String,
-            deviceId: String,
+            authInformation: AuthInformation,
             httpClient: OkHttpClient = OkHttpClient(),
         ): Tinkoff {
-            val authResponse = auth(deviceId = deviceId, httpClient = httpClient)
+            val authResponse = auth(deviceId = authInformation.deviceId, httpClient = httpClient)
             val newSessionId = authResponse.payload.sessionid
 
             val code = httpPost {
                 url("https://api.tinkoff.ru/v1/auth/by/pin?sessionid=$newSessionId")
                 body {
                     form {
-                        "pinHash" to pinHash
+                        "pinHash" to authInformation.pinHash
                         "auth_type" to "pin"
-                        "auth_type_set_date" to authTypeSetDate.formatToAuthTypeSetDate()
-                        "oldSessionId" to oldSessionId
+                        "auth_type_set_date" to authInformation.authTypeSafeDate
+                        "oldSessionId" to authInformation.sessionId
                         "mobile_device_model" to "MAR-LX1M"
                         "mobile_device_os" to "android"
                         "appVersion" to "5.8.1"
@@ -147,8 +146,8 @@ class Tinkoff(
                         "mobile_device_os_version" to "10"
                         "screen_height" to "2107"
                         "appsflyer_uid" to "1610221902223-5226330507306162632"
-                        "deviceId" to deviceId
-                        "oldDeviceId" to deviceId
+                        "deviceId" to authInformation.deviceId
+                        "oldDeviceId" to authInformation.deviceId
                     }
                 }
             }.code
@@ -158,10 +157,12 @@ class Tinkoff(
             }
             return Tinkoff(
                 client = httpClient,
-                sessionId = newSessionId,
-                deviceId = deviceId,
-                authTypeSafeDate = authTypeSetDate,
-                pinHash = pinHash
+                authInformation = AuthInformation(
+                    sessionId = newSessionId,
+                    deviceId = authInformation.deviceId,
+                    authTypeSafeDate = authInformation.authTypeSafeDate,
+                    pinHash = authInformation.pinHash
+                )
             )
 
         }
@@ -427,11 +428,14 @@ class Tinkoff(
         }
     }
 
+    private val sessionId = authInformation.sessionId
+    private val deviceId = authInformation.deviceId
+
     fun personalInfo(
-    ): String? {
+    ): String {
         return httpGet(client) {
             url("https://api.tinkoff.ru/v1/personal_info?sessionid=$sessionId")
-        }.body?.string()
+        }.body?.string()!!
     }
 
     fun getAccounts(): String {
