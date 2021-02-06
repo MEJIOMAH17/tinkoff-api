@@ -6,5 +6,5 @@ import kotlinx.serialization.Serializable
 data class Currency(
     val code: Int? = null,
     val name: String? = null,
-    val strCode: String
+    val strCode: String? = null
 )

@@ -12,6 +12,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import ru.mejiomah17.tinkoff.api.model.auth.by.phone.AuthByPhoneResponse
 import ru.mejiomah17.tinkoff.api.model.auth.session.AuthResponse
 import ru.mejiomah17.tinkoff.api.model.grouped.requests.accounts.AccountsResponse
+import ru.mejiomah17.tinkoff.api.model.operations.OperationsResponse
 import java.io.File
 import java.time.Duration
 import java.time.Instant
@@ -467,10 +468,10 @@ class Tinkoff internal constructor(
         account: String,
         startDate: Instant,
         endDate: Instant
-    ): String {
-        return httpGet {
+    ): OperationsResponse {
+        return get {
             url("https://api.tinkoff.ru/v1/operations?account=$account&end=${endDate.toEpochMilli()}&start=${startDate.toEpochMilli()}&sessionid=$sessionId&appVersion=5.8.1&platform=android")
-        }.body!!.string()
+        }
     }
 
     private inline fun <reified T> get(noinline block: HttpPostContext.() -> Unit): T {

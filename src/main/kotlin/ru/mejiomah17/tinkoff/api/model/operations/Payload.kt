@@ -1,0 +1,55 @@
+package ru.mejiomah17.tinkoff.api.model.operations
+
+
+import kotlinx.serialization.Serializable
+import ru.mejiomah17.tinkoff.api.model.common.Amount
+
+@Serializable
+data class Payload(
+    val account: String? = null,
+    val accountAmount: Amount? = null,
+    val additionalInfo: List<AdditionalInfo>? = null,
+    val amount: Amount? = null,
+    val authMessage: String? = null,
+    val authorizationId: String? = null,
+    val brand: Brand? = null,
+    val card: String? = null,
+    val cardNumber: String? = null,
+    val cardPresent: Boolean? = null,
+    val cashback: Double? = null,
+    val cashbackAmount: Amount? = null,
+    val category: Category? = null,
+    val compensation: String? = null,
+    val debitingTime: DebitingTime? = null,
+    val description: String? = null,
+    val group: String? = null,
+    val hasShoppingReceipt: Boolean? = null,
+    val hasStatement: Boolean? = null,
+    val id: String? = null,
+    val idSourceType: String? = null,
+    val isDispute: Boolean? = null,
+    val isExternalCard: Boolean? = null,
+    val isHce: Boolean? = null,
+    val isOffline: Boolean? = null,
+    val isSuspicious: Boolean? = null,
+    val locations: List<Location>? = null,
+    val loyaltyBonus: List<LoyaltyBonus>? = null,
+    val mcc: Int? = null,
+    val mccString: String? = null,
+    val merchant: Merchant? = null,
+    val message: String? = null,
+    val operationPaymentType: String? = null,
+    val operationTime: OperationTime? = null,
+    val operationTransferred: Boolean? = null,
+    val payment: Payment? = null,
+    val senderAgreement: String? = null,
+    val senderDetails: String? = null,
+    val spendingCategory: SpendingCategory? = null,
+    val status: String? = null,
+    val subcategory: String? = null,
+    val subgroup: Subgroup? = null,
+    val trancheCreationAllowed: Boolean? = null,
+    val type: String? = null,
+    val ucid: String? = null,
+    val virtualPaymentType: Int? = null
+)
