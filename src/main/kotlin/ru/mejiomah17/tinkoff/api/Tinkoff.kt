@@ -1,5 +1,6 @@
 package ru.mejiomah17.tinkoff.api
 
+import io.github.rybalkinsd.kohttp.dsl.context.HttpGetContext
 import io.github.rybalkinsd.kohttp.dsl.context.HttpPostContext
 import io.github.rybalkinsd.kohttp.dsl.httpGet
 import io.github.rybalkinsd.kohttp.dsl.httpPost
@@ -40,18 +41,23 @@ fun main() {
     }
 
 
-    val secondTinkoff = Tinkoff.create(
+    val tinkoff = Tinkoff.create(
         authInformation = Json.decodeFromString(authFile.readText()),
         httpClient = client
     )
-    authFile.writeText(Json.encodeToString(secondTinkoff.authInformation))
-    val accountId = secondTinkoff.getAccounts().payload.accounts?.payload?.first { it.accountType == "Current" }?.id
+    authFile.writeText(Json.encodeToString(tinkoff.authInformation))
+    tinkoff.getAccountsRaw()
+    val accountId = tinkoff.getAccounts().payload.accounts?.payload?.first { it.accountType == "Current" }?.id
     if (accountId != null) {
-        secondTinkoff.getOperations(
+        val operations = tinkoff.getOperations(
             account = accountId,
-            startDate = Instant.now().minus(Duration.ofDays(30)),
+            startDate = Instant.now().minus(Duration.ofDays(900)),
             endDate = Instant.now()
-        )
+        ).payload ?: emptyList()
+        val categories =
+            operations.map { it.mccString to it.spendingCategory?.id to it.spendingCategory?.name }.distinct()
+
+
     }
 
 }
@@ -437,10 +443,6 @@ class Tinkoff internal constructor(
         private inline fun <reified T> post(client: OkHttpClient, noinline block: HttpPostContext.() -> Unit): T {
             return json.decodeFromString(httpPost(client, block).body?.string()!!)
         }
-
-        private inline fun <reified T> get(client: OkHttpClient, noinline block: HttpPostContext.() -> Unit): T {
-            return json.decodeFromString(httpPost(client, block).body?.string()!!)
-        }
     }
 
     private val sessionId = authInformation.sessionId
@@ -454,6 +456,10 @@ class Tinkoff internal constructor(
     }
 
     fun getAccounts(): AccountsResponse {
+        return json.decodeFromString(getAccountsRaw())
+    }
+
+    fun getAccountsRaw(): String {
         return post {
             url("https://api.tinkoff.ru/v1/grouped_requests?sessionid=$sessionId&deviceId=$deviceId&appVersion=5.8.1&platform=android")
             body {
@@ -469,16 +475,30 @@ class Tinkoff internal constructor(
         startDate: Instant,
         endDate: Instant
     ): OperationsResponse {
+        return json.decodeFromString(
+            getOperationsRaw(
+                account = account,
+                startDate = startDate,
+                endDate = endDate
+            )
+        )
+    }
+
+    fun getOperationsRaw(
+        account: String,
+        startDate: Instant,
+        endDate: Instant
+    ): String {
         return get {
             url("https://api.tinkoff.ru/v1/operations?account=$account&end=${endDate.toEpochMilli()}&start=${startDate.toEpochMilli()}&sessionid=$sessionId&appVersion=5.8.1&platform=android")
         }
     }
 
-    private inline fun <reified T> get(noinline block: HttpPostContext.() -> Unit): T {
-        return Companion.get(client, block)
+    private fun get(block: HttpGetContext.() -> Unit): String {
+        return httpGet(client, block).body!!.string()
     }
 
-    private inline fun <reified T> post(noinline block: HttpPostContext.() -> Unit): T {
-        return Companion.post(client, block)
+    private fun post(block: HttpPostContext.() -> Unit): String {
+        return httpPost(client, block).body!!.string()
     }
 }
