@@ -17,7 +17,8 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:1.4.20")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1+")
     implementation("com.squareup.okhttp3:logging-interceptor:4.9.0")
-
+    implementation("org.slf4j:slf4j-api:1.7.29")
+    implementation("io.github.microutils:kotlin-logging:1+")
 }
 
 group = "ru.mekosichkin"

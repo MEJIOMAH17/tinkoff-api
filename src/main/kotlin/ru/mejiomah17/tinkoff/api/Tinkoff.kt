@@ -5,21 +5,24 @@ import io.github.rybalkinsd.kohttp.dsl.context.HttpPostContext
 import io.github.rybalkinsd.kohttp.dsl.httpGet
 import io.github.rybalkinsd.kohttp.dsl.httpPost
 import io.github.rybalkinsd.kohttp.ext.url
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
-import ru.mejiomah17.tinkoff.api.model.auth.by.phone.AuthByPhoneResponse
-import ru.mejiomah17.tinkoff.api.model.auth.session.AuthResponse
-import ru.mejiomah17.tinkoff.api.model.grouped.requests.accounts.AccountsResponse
-import ru.mejiomah17.tinkoff.api.model.operations.OperationsResponse
 import java.io.File
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import mu.KotlinLogging.logger
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import ru.mejiomah17.tinkoff.api.model.auth.by.password.AuthByPasswordResponse
+import ru.mejiomah17.tinkoff.api.model.auth.by.phone.AuthByPhoneResponse
+import ru.mejiomah17.tinkoff.api.model.auth.session.AuthResponse
+import ru.mejiomah17.tinkoff.api.model.confirm.ConfirmSessionIdResponse
+import ru.mejiomah17.tinkoff.api.model.grouped.requests.accounts.AccountsResponse
+import ru.mejiomah17.tinkoff.api.model.operations.OperationsResponse
 
 
 fun main() {
@@ -30,21 +33,29 @@ fun main() {
     val client = OkHttpClient.Builder()
         .addInterceptor(logging)
         .build()
-    if (!authFile.exists()) {
-        val tinkoff = Tinkoff.create(
+//    if (!authFile.exists()) {
+    val tinkoff = try {
+        Tinkoff.create(
             phoneNumber = System.getenv("phone"),
             httpClient = client,
             confirmationCodeProvider = { println("password sms:");readLine()!! },
             password = System.getenv("password")
         )
-        authFile.writeText(Json.encodeToString(tinkoff.authInformation))
+    } catch (e: Exception) {
+        println(e)
+        throw e
     }
 
 
-    val tinkoff = Tinkoff.create(
-        authInformation = Json.decodeFromString(authFile.readText()),
-        httpClient = client
-    )
+
+    authFile.writeText(Json.encodeToString(tinkoff.authInformation))
+//    }
+//
+//
+//    val tinkoff = Tinkoff.create(
+//        authInformation = Json.decodeFromString(authFile.readText()),
+//        httpClient = client
+//    )
     authFile.writeText(Json.encodeToString(tinkoff.authInformation))
     tinkoff.getAccountsRaw()
     val accountId = tinkoff.getAccounts().payload.accounts?.payload?.first { it.accountType == "Current" }?.id
@@ -56,8 +67,6 @@ fun main() {
         ).payload ?: emptyList()
         val categories =
             operations.map { it.mccString to it.spendingCategory?.id to it.spendingCategory?.name }.distinct()
-
-
     }
 
 }
@@ -70,11 +79,13 @@ class Tinkoff internal constructor(
         private val json = Json {
             ignoreUnknownKeys = true
         }
+        private val log = logger {}
 
         /**
          * [phoneNumber] - format +79161234567
          * [confirmationCodeProvider] - should return four digit code from sms
          */
+        @Throws(WrongPasswordException::class, WrongSmsCodeException::class, WrongPhoneNumberException::class)
         fun create(
             phoneNumber: String,
             confirmationCodeProvider: () -> String,
@@ -89,7 +100,7 @@ class Tinkoff internal constructor(
                 phoneNumber = phoneNumber,
                 client = httpClient
             )
-            val authByPhoneResponse = authByPhone(
+            val operationTicket = authByPhone(
                 authResponse = authResponse,
                 deviceId = deviceId,
                 phoneNumber = phoneNumber,
@@ -98,7 +109,7 @@ class Tinkoff internal constructor(
             confirmSession(
                 authResponse = authResponse,
                 deviceId = deviceId,
-                authByPhoneResponse = authByPhoneResponse,
+                operationTicket = operationTicket,
                 confirmationCode = confirmationCodeProvider(),
                 client = httpClient
             )
@@ -252,13 +263,16 @@ class Tinkoff internal constructor(
             }
         }
 
+        /**
+         * Returns operation ticket
+         */
         private fun authByPhone(
             authResponse: AuthResponse,
             deviceId: String,
             phoneNumber: String,
             client: OkHttpClient
-        ): AuthByPhoneResponse {
-            return post(client) {
+        ): String {
+            val rs = post<AuthByPhoneResponse>(client) {
                 url("https://api.tinkoff.ru/v1/auth/by/phone?sessionid=${authResponse.payload.sessionid}")
                 body {
                     form {
@@ -285,20 +299,29 @@ class Tinkoff internal constructor(
                     "user-agent" to "HUAWEI MAR-LX1M/android: 10/TCSMB/5.8.1"
                 }
             }
+            return when (rs.resultCode) {
+                "WAITING_CONFIRMATION",
+                "OK" -> rs.operationTicket ?: throw error("OK rs does not contain operation ticket")
+                "INVALID_REQUEST_DATA" -> throw WrongPhoneNumberException()
+                else -> {
+                    error("UNKNOWN CODE ${rs.resultCode}")
+                }
+            }
+
         }
 
         private fun confirmSession(
             authResponse: AuthResponse,
             deviceId: String,
-            authByPhoneResponse: AuthByPhoneResponse,
+            operationTicket: String,
             confirmationCode: String,
             client: OkHttpClient
         ) {
-            httpPost(client) {
+            val rs = post<ConfirmSessionIdResponse>(client) {
                 url("https://api.tinkoff.ru/v1/confirm?sessionid=${authResponse.payload.sessionid}")
                 body {
                     form {
-                        "initialOperationTicket" to authByPhoneResponse.operationTicket
+                        "initialOperationTicket" to operationTicket
                         "initialOperation" to "auth/by/phone"
                         "confirmationData" to "{\"SMSBYID\":\"$confirmationCode\"}"
                         "mobile_device_model" to "MAR-LX1M"
@@ -321,6 +344,15 @@ class Tinkoff internal constructor(
                 }
                 header {
                     "user-agent" to "HUAWEI MAR-LX1M/android: 10/TCSMB/5.8.1"
+                }
+            }
+            when (rs.resultCode.toUpperCase()) {
+                "OK" -> Unit
+                "CONFIRMATION_FAILED" -> throw WrongSmsCodeException()
+                else -> {
+                    log.error {
+                        "UNKNOWN result code ${rs.resultCode.toUpperCase()}"
+                    }
                 }
             }
         }
@@ -364,7 +396,7 @@ class Tinkoff internal constructor(
             password: String,
             client: OkHttpClient,
         ) {
-            httpPost(client) {
+            val result = post<AuthByPasswordResponse>(client) {
                 url("https://api.tinkoff.ru/v1/auth/by/password?sessionid=${authResponse.payload.sessionid}")
                 body {
                     form {
@@ -389,6 +421,15 @@ class Tinkoff internal constructor(
                 }
                 header {
                     "user-agent" to "HUAWEI MAR-LX1M/android: 10/TCSMB/5.8.1"
+                }
+            }
+            when (result.resultCode.toUpperCase()) {
+                "OK" -> Unit
+                "INVALID_PASSWORD" -> throw WrongPasswordException()
+                else -> {
+                    log.error {
+                        "UNKNOWN result code ${result.resultCode.toUpperCase()}"
+                    }
                 }
             }
         }
