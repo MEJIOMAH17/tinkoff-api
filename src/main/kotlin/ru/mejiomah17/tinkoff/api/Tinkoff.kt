@@ -23,6 +23,7 @@ import ru.mejiomah17.tinkoff.api.model.auth.session.AuthResponse
 import ru.mejiomah17.tinkoff.api.model.confirm.ConfirmSessionIdResponse
 import ru.mejiomah17.tinkoff.api.model.grouped.requests.accounts.AccountsResponse
 import ru.mejiomah17.tinkoff.api.model.operations.OperationsResponse
+import ru.mejiomah17.tinkoff.api.model.personal.PersonalInfoResponse
 
 
 fun main() {
@@ -346,12 +347,12 @@ class Tinkoff internal constructor(
                     "user-agent" to "HUAWEI MAR-LX1M/android: 10/TCSMB/5.8.1"
                 }
             }
-            when (rs.resultCode.toUpperCase()) {
+            when (rs.resultCode.uppercase(Locale.getDefault())) {
                 "OK" -> Unit
                 "CONFIRMATION_FAILED" -> throw WrongSmsCodeException()
                 else -> {
                     log.error {
-                        "UNKNOWN result code ${rs.resultCode.toUpperCase()}"
+                        "UNKNOWN result code ${rs.resultCode.uppercase(Locale.getDefault())}"
                     }
                 }
             }
@@ -423,12 +424,12 @@ class Tinkoff internal constructor(
                     "user-agent" to "HUAWEI MAR-LX1M/android: 10/TCSMB/5.8.1"
                 }
             }
-            when (result.resultCode.toUpperCase()) {
+            when (result.resultCode.uppercase(Locale.getDefault())) {
                 "OK" -> Unit
                 "INVALID_PASSWORD" -> throw WrongPasswordException()
                 else -> {
                     log.error {
-                        "UNKNOWN result code ${result.resultCode.toUpperCase()}"
+                        "UNKNOWN result code ${result.resultCode.uppercase(Locale.getDefault())}"
                     }
                 }
             }
@@ -490,7 +491,11 @@ class Tinkoff internal constructor(
     private val deviceId = authInformation.deviceId
 
     fun personalInfo(
-    ): String {
+    ): PersonalInfoResponse {
+        return json.decodeFromString(personalInfoRaw())
+    }
+
+    fun personalInfoRaw(): String {
         return httpGet(client) {
             url("https://api.tinkoff.ru/v1/personal_info?sessionid=$sessionId")
         }.body?.string()!!
