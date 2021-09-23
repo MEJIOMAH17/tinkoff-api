@@ -22,7 +22,7 @@ dependencies {
 }
 
 group = "ru.mekosichkin"
-version = "2.0.0"
+version = "3.0.0"
 description = "tinkoff-api"
 java.sourceCompatibility = JavaVersion.VERSION_1_8
 
