@@ -9,7 +9,7 @@ val githubToken: String by project
 val githubUser: String by project
 
 repositories {
-    jcenter()
+    mavenCentral()
 }
 
 dependencies {
